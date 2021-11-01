@@ -68,7 +68,8 @@ def train_auxiliary():
 
     # ============ preparing auxiliary label ... ============
     loom = Loom(args.image_size, args.batch_size_per_gpu, args.aux_labels).to(device)
-    distortions = loom.get_distortions(alpha=128, epsilon=2, kernel_size=41)
+    # distortions = loom.get_distortions(alpha=128, epsilon=2, kernel_size=41)
+    distortions = loom.get_distortions_shang(alpha=20, epsilon=2, kernel_size=15)
 
     # ============ building network ... ============
     arch = 'resnet50'
@@ -176,6 +177,21 @@ class Loom(nn.Module):
         # second pass
         pixel_width = 2.0/(self.image_size)
         grid = torch.clamp(grid, -pixel_width*epsilon, pixel_width*epsilon)
+        grid = self.gaussian_blur(grid, kernel_size, sigma)
+        return grid
+
+    def get_distortions_shang(self, alpha, epsilon, kernel_size, sigma=None):
+        # select a sector, apply noise
+        value_range = (2.0/self.image_size)*alpha
+        # select sectors
+        sectors = torch.randint(0, 16, (self.aux_labels,)).to(device)
+        patch = (torch.rand(self.aux_labels, 2, 56, 56)*2-1)*value_range
+        patch = patch.to(device)
+        grid = torch.zeros(self.aux_labels, 2, self.image_size, self.image_size).detach().to(device)
+        for idx, s in enumerate(sectors):
+            sh, sw = s//4, s%4
+            grid[idx,:,sh*56:(sh+1)*56,sw*56:(sw+1)*56] += patch[idx,:,:,:]
+        # gaussian blur
         grid = self.gaussian_blur(grid, kernel_size, sigma)
         return grid
 
